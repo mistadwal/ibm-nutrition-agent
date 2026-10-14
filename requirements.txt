@@ -1,0 +1,16 @@
+langchain==0.2.16
+langchain-community==0.2.16
+langchain-ibm==0.1.12
+ibm-watsonx-ai==1.1.2
+chromadb==0.5.5
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12
+sentence-transformers==3.0.1
+pydantic==2.8.2
+python-dotenv==1.0.1
+requests==2.32.3
+Pillow==10.4.0
+pytesseract==0.3.13
+SpeechRecognition==3.10.4
+httpx==0.27.2

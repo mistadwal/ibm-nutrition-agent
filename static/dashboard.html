@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>IBM Nutrition Agent — Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f0f4f8; --card: #ffffff; --border: #e2e8f0;
+    --text: #1a202c; --muted: #718096; --accent: #3182ce;
+    --green: #38a169; --orange: #dd6b20; --red: #e53e3e;
+    --ibm-blue: #0f62fe; --ibm-dark: #161616;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'IBM Plex Sans', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* Header */
+  .header { background: var(--ibm-dark); color: #fff; padding: 14px 28px; display: flex; align-items: center; gap: 14px; border-bottom: 3px solid var(--ibm-blue); }
+  .header svg { flex-shrink: 0; }
+  .header h1 { font-size: 1.2rem; font-weight: 600; letter-spacing: 0.5px; }
+  .header p { font-size: 0.78rem; color: #a8b2bd; margin-top: 2px; }
+  .header .badge { margin-left: auto; background: var(--ibm-blue); font-size: 0.72rem; padding: 3px 10px; border-radius: 12px; }
+
+  /* Layout */
+  .container { max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } .grid-4 { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 540px) { .grid-4 { grid-template-columns: 1fr; } }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .card h3 { font-size: 0.85rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+
+  /* Stat tiles */
+  .stat { text-align: center; }
+  .stat .val { font-size: 2rem; font-weight: 700; }
+  .stat .sub { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+  .stat .prog-wrap { background: #edf2f7; border-radius: 8px; height: 6px; margin-top: 10px; overflow: hidden; }
+  .stat .prog-bar { height: 100%; border-radius: 8px; transition: width 0.8s ease; }
+
+  /* Tab nav */
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 24px; }
+  .tab { padding: 9px 18px; font-size: 0.87rem; font-weight: 500; border: none; background: none; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color 0.2s; }
+  .tab.active { color: var(--ibm-blue); border-bottom-color: var(--ibm-blue); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Buttons */
+  .btn { padding: 9px 20px; border-radius: 6px; border: none; font-size: 0.87rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  .btn-primary { background: var(--ibm-blue); color: #fff; }
+  .btn-primary:hover { background: #0353e9; }
+  .btn-secondary { background: #edf2f7; color: var(--text); }
+  .btn-secondary:hover { background: #e2e8f0; }
+
+  /* Forms */
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 0.83rem; font-weight: 600; margin-bottom: 5px; color: var(--muted); }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 0.9rem; background: #fafbfc; transition: border-color 0.2s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--ibm-blue); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Response panels */
+  .response-box { background: #f7fafc; border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-size: 0.88rem; line-height: 1.7; white-space: pre-wrap; max-height: 420px; overflow-y: auto; color: var(--text); }
+  .response-box.empty { color: var(--muted); font-style: italic; }
+
+  /* Meal log list */
+  .meal-list { list-style: none; }
+  .meal-list li { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .meal-list li:last-child { border-bottom: none; }
+  .meal-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+  .meal-info strong { font-size: 0.9rem; }
+  .meal-info small { color: var(--muted); font-size: 0.78rem; }
+
+  /* Deficiency pills */
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.76rem; font-weight: 600; margin: 3px; }
+  .pill-red { background: #fff5f5; color: var(--red); border: 1px solid #fed7d7; }
+  .pill-orange { background: #fffaf0; color: var(--orange); border: 1px solid #feebc8; }
+  .pill-green { background: #f0fff4; color: var(--green); border: 1px solid #c6f6d5; }
+
+  /* Loader */
+  .loader { display: none; text-align: center; padding: 30px; color: var(--muted); }
+  .loader.show { display: block; }
+  .spinner { display: inline-block; width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: var(--ibm-blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .section-title { font-size: 1rem; font-weight: 700; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--border); }
+  .alert { padding: 12px 16px; border-radius: 7px; font-size: 0.87rem; margin-bottom: 12px; }
+  .alert-warn { background: #fffaf0; border: 1px solid #feebc8; color: #7b341e; }
+  .alert-info { background: #ebf8ff; border: 1px solid #bee3f8; color: #2a4365; }
+</style>
+</head>
+<body>
+
+<!-- ===== HEADER ===== -->
+<header class="header">
+  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+    <rect width="32" height="32" rx="6" fill="#0f62fe"/>
+    <text x="5" y="23" font-size="18" fill="white">🥗</text>
+  </svg>
+  <div>
+    <h1>IBM Nutrition Agent</h1>
+    <p>Powered by IBM Granite via watsonx.ai — Multi-Agent System</p>
+  </div>
+  <div class="badge">🤖 Granite LLM Active</div>
+</header>
+
+<!-- ===== MAIN ===== -->
+<div class="container">
+
+  <!-- Tab Navigation -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab" onclick="switchTab('knowledge')">🔍 Knowledge Agent</button>
+    <button class="tab" onclick="switchTab('diet')">🥗 Diet Planner</button>
+    <button class="tab" onclick="switchTab('health')">💊 Health Advice</button>
+    <button class="tab" onclick="switchTab('log')">📝 Meal Log</button>
+  </div>
+
+  <!-- ===== TAB: DASHBOARD ===== -->
+  <div id="tab-dashboard" class="tab-panel active">
+    <div class="section-title">Daily Nutrition Overview</div>
+
+    <!-- Macro stat tiles -->
+    <div class="grid-4" id="macro-tiles">
+      <div class="card stat">
+        <h3>Calories</h3>
+        <div class="val" id="d-calories">—</div>
+        <div class="sub">of <span id="d-cal-goal">2000</span> kcal goal</div>
+        <div class="prog-wrap"><div class="prog-bar" id="prog-cal" style="width:0%;background:#0f62fe;"></div></div>
+      </div>
+      <div class="card stat">
+        <h3>Protein</h3>
+        <div class="val" id="d-protein">—</div>
+        <div class="sub">grams</div>
+        <div class="prog-wrap"><div class="prog-bar" id="prog-prot" style="width:0%;background:#38a169;"></div></div>
+      </div>
+      <div class="card stat">
+        <h3>Carbs</h3>
+        <div class="val" id="d-carbs">—</div>
+        <div class="sub">grams</div>
+        <div class="prog-wrap"><div class="prog-bar" id="prog-carb" style="width:0%;background:#d69e2e;"></div></div>
+      </div>
+      <div class="card stat">
+        <h3>Fat</h3>
+        <div class="val" id="d-fat">—</div>
+        <div class="sub">grams</div>
+        <div class="prog-wrap"><div class="prog-bar" id="prog-fat" style="width:0%;background:#e53e3e;"></div></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Macro doughnut chart -->
+      <div class="card">
+        <h3>Macro Breakdown</h3>
+        <canvas id="chart-macro" height="220"></canvas>
+      </div>
+      <!-- Weekly trend -->
+      <div class="card">
+        <h3>Weekly Calorie Trend</h3>
+        <canvas id="chart-weekly" height="220"></canvas>
+      </div>
+    </div>
+
+    <div style="height:20px;"></div>
+    <div class="grid-2">
+      <!-- Deficiencies & Surpluses -->
+      <div class="card">
+        <h3>⚠️ Nutritional Gaps</h3>
+        <div id="deficiency-area"><span class="pill pill-green">✓ No deficiencies detected — log meals to analyse</span></div>
+      </div>
+      <!-- Recent Meals -->
+      <div class="card">
+        <h3>Today's Meal Log</h3>
+        <ul class="meal-list" id="today-meals">
+          <li style="color:var(--muted);font-size:0.85rem;">No meals logged today. Use the Meal Log tab to add meals.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="height:20px;"></div>
+    <!-- Micronutrient bar chart -->
+    <div class="card">
+      <h3>Micronutrient Intake vs RDA</h3>
+      <canvas id="chart-micro" height="150"></canvas>
+    </div>
+
+    <div style="height:20px;"></div>
+    <!-- Refresh controls -->
+    <div style="display:flex;gap:10px;align-items:center;">
+      <label style="font-size:0.85rem;font-weight:600;">User ID:</label>
+      <input id="dash-user-id" style="width:180px;padding:7px 10px;border:1px solid var(--border);border-radius:5px;font-size:0.87rem;" placeholder="e.g. user_001"/>
+      <button class="btn btn-primary" onclick="refreshDashboard()">🔄 Refresh Dashboard</button>
+    </div>
+  </div>
+
+  <!-- ===== TAB: KNOWLEDGE AGENT ===== -->
+  <div id="tab-knowledge" class="tab-panel">
+    <div class="section-title">🔍 Nutrition Knowledge Agent (RAG + USDA)</div>
+    <div class="alert alert-info">Ask any question about nutrition — macros, vitamins, disease-specific diets, food composition. The agent uses IBM Granite + RAG over a curated knowledge base, enriched with live USDA FoodData Central lookups.</div>
+    <div class="form-group">
+      <label>Your Question</label>
+      <textarea id="knq-query" rows="3" placeholder="e.g. What are the nutritional values of 100g brown rice? OR What should a diabetic avoid eating?"></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="runKnowledgeQuery()">🧠 Ask Granite</button>
+    <div class="loader" id="kn-loader"><div class="spinner"></div><br/>Querying IBM Granite...</div>
+    <div style="height:16px;"></div>
+    <div class="response-box empty" id="kn-result">Response will appear here...</div>
+  </div>
+
+  <!-- ===== TAB: DIET PLANNER ===== -->
+  <div id="tab-diet" class="tab-panel">
+    <div class="section-title">🥗 Diet Recommendation Agent</div>
+    <div class="alert alert-info">Generate a personalised multi-day meal plan. The agent uses the Mifflin-St Jeor formula to calculate your calorie targets, then IBM Granite creates culturally-aware, condition-appropriate meals.</div>
+    <div class="form-row">
+      <div class="form-group"><label>Full Name</label><input id="dp-name" placeholder="Jane Doe"/></div>
+      <div class="form-group"><label>User ID</label><input id="dp-uid" placeholder="user_001"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Age</label><input id="dp-age" type="number" placeholder="30"/></div>
+      <div class="form-group"><label>Gender</label>
+        <select id="dp-gender"><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Weight (kg)</label><input id="dp-weight" type="number" placeholder="65"/></div>
+      <div class="form-group"><label>Height (cm)</label><input id="dp-height" type="number" placeholder="165"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Activity Level</label>
+        <select id="dp-activity">
+          <option value="sedentary">Sedentary</option>
+          <option value="lightly_active">Lightly Active</option>
+          <option value="moderately_active" selected>Moderately Active</option>
+          <option value="very_active">Very Active</option>
+          <option value="extra_active">Extra Active</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Fitness Goal</label>
+        <select id="dp-goal">
+          <option value="maintain_weight">Maintain Weight</option>
+          <option value="lose_weight">Lose Weight</option>
+          <option value="gain_muscle">Gain Muscle</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Health Conditions (comma-separated)</label>
+        <input id="dp-conditions" placeholder="e.g. diabetes, hypertension"/>
+      </div>
+      <div class="form-group"><label>Allergies (comma-separated)</label>
+        <input id="dp-allergies" placeholder="e.g. peanuts, shellfish"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Dietary Preferences</label>
+        <input id="dp-prefs" placeholder="e.g. vegetarian, halal"/>
+      </div>
+      <div class="form-group"><label>Cultural Background</label>
+        <input id="dp-culture" placeholder="e.g. South Asian, Mediterranean"/>
+      </div>
+    </div>
+    <div class="form-group"><label>Number of Days</label>
+      <input id="dp-days" type="number" value="7" min="1" max="30" style="width:100px;"/>
+    </div>
+    <button class="btn btn-primary" onclick="runDietPlan()">🥗 Generate Meal Plan</button>
+    <div class="loader" id="dp-loader"><div class="spinner"></div><br/>IBM Granite is creating your personalised meal plan...</div>
+    <div style="height:16px;"></div>
+    <div class="card" id="dp-targets-card" style="display:none;margin-bottom:16px;">
+      <h3>Your Daily Nutrition Targets</h3>
+      <div id="dp-targets"></div>
+    </div>
+    <div class="response-box empty" id="dp-result">Your personalised meal plan will appear here...</div>
+  </div>
+
+  <!-- ===== TAB: HEALTH ADVICE ===== -->
+  <div id="tab-health" class="tab-panel">
+    <div class="section-title">💊 Health Advisory Agent</div>
+    <div class="alert alert-warn">⚠️ This tool provides general dietary guidance only and does not replace professional medical advice. Always consult a healthcare provider for medical decisions.</div>
+    <div class="form-row">
+      <div class="form-group"><label>User ID</label><input id="ha-uid" placeholder="user_001"/></div>
+      <div class="form-group"><label>Age</label><input id="ha-age" type="number" placeholder="45"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Gender</label>
+        <select id="ha-gender"><option value="female">Female</option><option value="male">Male</option></select>
+      </div>
+      <div class="form-group"><label>Weight (kg)</label><input id="ha-weight" type="number" placeholder="80"/></div>
+    </div>
+    <div class="form-group"><label>Health Conditions</label>
+      <input id="ha-conditions" placeholder="e.g. diabetes, heart_disease"/>
+    </div>
+    <div class="form-group"><label>Specific Health Concern</label>
+      <textarea id="ha-concern" rows="2" placeholder="e.g. I want to lower my HbA1c through diet. What foods should I prioritise?"></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="runHealthAdvice()">💊 Get Health Advice</button>
+    <div class="loader" id="ha-loader"><div class="spinner"></div><br/>Generating evidence-based advice...</div>
+    <div style="height:16px;"></div>
+    <div class="response-box empty" id="ha-result">Health advice will appear here...</div>
+  </div>
+
+  <!-- ===== TAB: MEAL LOG ===== -->
+  <div id="tab-log" class="tab-panel">
+    <div class="section-title">📝 Food Log & Feedback Agent</div>
+    <div class="alert alert-info">Log your meals in plain text. IBM Granite will parse food items, look up nutritional data from USDA, and give you instant feedback.</div>
+    <div class="form-row">
+      <div class="form-group"><label>User ID</label><input id="ml-uid" placeholder="user_001"/></div>
+      <div class="form-group"><label>Date</label><input id="ml-date" type="date"/></div>
+    </div>
+    <div class="form-group"><label>Meal Type</label>
+      <select id="ml-type">
+        <option value="breakfast">Breakfast</option>
+        <option value="lunch">Lunch</option>
+        <option value="dinner">Dinner</option>
+        <option value="snack">Snack</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Meal Description (text)</label>
+      <textarea id="ml-desc" rows="3" placeholder="e.g. 2 scrambled eggs with 2 slices whole wheat toast, a glass of orange juice, and a banana"></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="logMeal()">📝 Log & Analyse Meal</button>
+    <div class="loader" id="ml-loader"><div class="spinner"></div><br/>Analysing your meal...</div>
+    <div style="height:16px;"></div>
+    <div id="ml-nutrients" style="display:none;" class="card" style="margin-bottom:16px;">
+      <h3>Meal Nutritional Breakdown</h3>
+      <canvas id="chart-meal" height="120"></canvas>
+    </div>
+    <div class="response-box empty" id="ml-result">Feedback will appear here after logging a meal...</div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+const API = '';   // Same origin — change to http://localhost:8000 if serving separately
+
+// ── Tab switching ──────────────────────────────────────────────────
+function switchTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ── Chart instances ────────────────────────────────────────────────
+let macroChart, weeklyChart, microChart, mealChart;
+
+function initCharts() {
+  // Macro doughnut
+  macroChart = new Chart(document.getElementById('chart-macro'), {
+    type: 'doughnut',
+    data: { labels: ['Carbs', 'Protein', 'Fat'], datasets: [{ data: [0,0,0], backgroundColor: ['#d69e2e','#38a169','#e53e3e'], borderWidth: 0 }] },
+    options: { plugins: { legend: { position: 'bottom' } }, cutout: '65%' }
+  });
+
+  // Weekly line
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  weeklyChart = new Chart(document.getElementById('chart-weekly'), {
+    type: 'line',
+    data: { labels: days, datasets: [
+      { label: 'Calories', data: [0,0,0,0,0,0,0], borderColor: '#0f62fe', backgroundColor: 'rgba(15,98,254,0.08)', tension: 0.4, fill: true },
+      { label: 'Goal', data: [2000,2000,2000,2000,2000,2000,2000], borderColor: '#e53e3e', borderDash: [5,5], pointRadius: 0 }
+    ]},
+    options: { plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: false, min: 1000 } } }
+  });
+
+  // Micronutrient bar
+  microChart = new Chart(document.getElementById('chart-micro'), {
+    type: 'bar',
+    data: {
+      labels: ['Fiber (g)', 'Calcium (mg/10)', 'Iron (mg)', 'Vit C (mg)', 'Sodium (mg/100)', 'Potassium (mg/100)'],
+      datasets: [
+        { label: 'You', data: [0,0,0,0,0,0], backgroundColor: '#0f62fe' },
+        { label: 'RDA', data: [25, 100, 14, 65, 23, 47], backgroundColor: '#e2e8f0' }
+      ]
+    },
+    options: { plugins: { legend: { position: 'top' } }, scales: { x: { stacked: false }, y: { beginAtZero: true } } }
+  });
+}
+
+// ── Dashboard refresh ──────────────────────────────────────────────
+async function refreshDashboard() {
+  const uid = document.getElementById('dash-user-id').value.trim() || 'user_001';
+  try {
+    const res = await fetch(`${API}/api/meals/summary/${uid}`);
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    updateDashboard(data);
+  } catch(e) {
+    // Show demo data when API is unavailable
+    updateDashboard(getDemoData());
+  }
+}
+
+function getDemoData() {
+  return {
+    total_nutrients: { calories: 1340, protein_g: 62, carbs_g: 178, fat_g: 41, fiber_g: 18, calcium_mg: 620, iron_mg: 9, vitamin_c_mg: 48, sodium_mg: 1820, potassium_mg: 2640 },
+    goal_calories: 2000,
+    deficiencies: ['fiber_g', 'vitamin_c_mg'],
+    surpluses: [],
+    meals: [
+      { meal_type: 'breakfast', description: '2 eggs, toast, orange juice', total_nutrients: { calories: 420 } },
+      { meal_type: 'lunch', description: 'Grilled chicken salad', total_nutrients: { calories: 520 } },
+      { meal_type: 'snack', description: 'Apple and almonds', total_nutrients: { calories: 190 } },
+    ]
+  };
+}
+
+function updateDashboard(data) {
+  const n = data.total_nutrients;
+  const goal = data.goal_calories || 2000;
+
+  document.getElementById('d-calories').textContent = Math.round(n.calories) + ' kcal';
+  document.getElementById('d-protein').textContent = Math.round(n.protein_g) + ' g';
+  document.getElementById('d-carbs').textContent = Math.round(n.carbs_g) + ' g';
+  document.getElementById('d-fat').textContent = Math.round(n.fat_g) + ' g';
+  document.getElementById('d-cal-goal').textContent = goal;
+
+  setBar('prog-cal', n.calories, goal);
+  setBar('prog-prot', n.protein_g, 125);
+  setBar('prog-carb', n.carbs_g, 250);
+  setBar('prog-fat', n.fat_g, 78);
+
+  // Macro doughnut
+  macroChart.data.datasets[0].data = [n.carbs_g, n.protein_g, n.fat_g];
+  macroChart.update();
+
+  // Micronutrient chart
+  microChart.data.datasets[0].data = [
+    n.fiber_g,
+    (n.calcium_mg||0)/10,
+    n.iron_mg||0,
+    n.vitamin_c_mg||0,
+    (n.sodium_mg||0)/100,
+    (n.potassium_mg||0)/100
+  ];
+  microChart.update();
+
+  // Weekly chart: put today's value at position 6 (Sun)
+  const today = new Date().getDay();
+  weeklyChart.data.datasets[0].data[today === 0 ? 6 : today-1] = Math.round(n.calories);
+  weeklyChart.data.datasets[1].data = Array(7).fill(goal);
+  weeklyChart.update();
+
+  // Deficiencies
+  const defArea = document.getElementById('deficiency-area');
+  if (data.deficiencies && data.deficiencies.length) {
+    defArea.innerHTML = data.deficiencies.map(d => `<span class="pill pill-red">↓ ${d}</span>`).join('') +
+      (data.surpluses||[]).map(s => `<span class="pill pill-orange">↑ ${s}</span>`).join('');
+  } else {
+    defArea.innerHTML = '<span class="pill pill-green">✓ All key nutrients within range</span>';
+  }
+
+  // Today's meals
+  const mealList = document.getElementById('today-meals');
+  const icons = { breakfast: '🌅', lunch: '☀️', dinner: '🌙', snack: '🍎' };
+  const colors = { breakfast: '#ebf8ff', lunch: '#f0fff4', dinner: '#faf5ff', snack: '#fffaf0' };
+  if (data.meals && data.meals.length) {
+    mealList.innerHTML = data.meals.map(m => `
+      <li>
+        <div class="meal-icon" style="background:${colors[m.meal_type]||'#f7fafc'}">${icons[m.meal_type]||'🍽️'}</div>
+        <div class="meal-info">
+          <strong>${m.meal_type.charAt(0).toUpperCase()+m.meal_type.slice(1)}</strong><br/>
+          <small>${m.description.substring(0,60)}${m.description.length>60?'...':''}</small><br/>
+          <small style="color:var(--ibm-blue)">${Math.round(m.total_nutrients.calories)} kcal</small>
+        </div>
+      </li>`).join('');
+  }
+}
+
+function setBar(id, val, max) {
+  const pct = Math.min(100, Math.round((val/max)*100));
+  const el = document.getElementById(id);
+  el.style.width = pct + '%';
+  el.style.background = pct > 110 ? '#e53e3e' : pct > 90 ? '#38a169' : '#0f62fe';
+}
+
+// ── Knowledge Agent ────────────────────────────────────────────────
+async function runKnowledgeQuery() {
+  const query = document.getElementById('knq-query').value.trim();
+  if (!query) return alert('Please enter a question.');
+  showLoader('kn-loader'); clearResult('kn-result');
+  try {
+    const res = await fetch(`${API}/api/nutrition/query`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ query, user_id: null, context: {} })
+    });
+    const data = await res.json();
+    const answer = data.result?.answer || JSON.stringify(data.result, null, 2);
+    showResult('kn-result', answer + (data.sources?.length ? `\n\n📚 Sources: ${data.sources.join(', ')}` : ''));
+  } catch(e) {
+    showResult('kn-result', '⚠️ API Error: ' + e.message + '\n\nMake sure the server is running: python app.py');
+  }
+  hideLoader('kn-loader');
+}
+
+// ── Diet Plan ──────────────────────────────────────────────────────
+function buildProfile(prefix) {
+  const conditions_raw = (document.getElementById(prefix+'-conditions')?.value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const valid_conditions = ['diabetes','hypertension','heart_disease','celiac','kidney_disease','obesity','none'];
+  return {
+    user_id: document.getElementById(prefix+'-uid')?.value || 'user_demo',
+    name: document.getElementById(prefix+'-name')?.value || '',
+    age: parseInt(document.getElementById(prefix+'-age')?.value||'30'),
+    gender: document.getElementById(prefix+'-gender')?.value || 'female',
+    weight_kg: parseFloat(document.getElementById(prefix+'-weight')?.value||'65'),
+    height_cm: parseFloat(document.getElementById(prefix+'-height')?.value||'165'),
+    activity_level: document.getElementById(prefix+'-activity')?.value || 'moderately_active',
+    fitness_goal: document.getElementById(prefix+'-goal')?.value || 'maintain_weight',
+    health_conditions: conditions_raw.filter(c => valid_conditions.includes(c)),
+    allergies: (document.getElementById(prefix+'-allergies')?.value||'').split(',').map(s=>s.trim()).filter(Boolean),
+    dietary_preferences: (document.getElementById(prefix+'-prefs')?.value||'').split(',').map(s=>s.trim()).filter(Boolean),
+    cultural_background: document.getElementById(prefix+'-culture')?.value || '',
+  };
+}
+
+async function runDietPlan() {
+  const profile = buildProfile('dp');
+  const num_days = parseInt(document.getElementById('dp-days').value) || 7;
+  showLoader('dp-loader'); clearResult('dp-result');
+  try {
+    const res = await fetch(`${API}/api/diet/plan`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ profile, num_days, preferences: {} })
+    });
+    const data = await res.json();
+    const targets = data.result?.daily_targets;
+    if (targets) {
+      document.getElementById('dp-targets-card').style.display = 'block';
+      document.getElementById('dp-targets').innerHTML =
+        `<span class="pill pill-green">🔥 ${targets.calories} kcal/day</span>
+         <span class="pill" style="background:#f0fff4;color:#276749;border:1px solid #c6f6d5;">🥩 Protein: ${targets.protein_g}g</span>
+         <span class="pill" style="background:#fffff0;color:#744210;border:1px solid #fefcbf;">🌾 Carbs: ${targets.carbs_g}g</span>
+         <span class="pill" style="background:#fff5f5;color:#742a2a;border:1px solid #fed7d7;">🥑 Fat: ${targets.fat_g}g</span>`;
+    }
+    showResult('dp-result', data.result?.meal_plan || JSON.stringify(data.result, null, 2));
+  } catch(e) {
+    showResult('dp-result', '⚠️ API Error: ' + e.message);
+  }
+  hideLoader('dp-loader');
+}
+
+// ── Health Advice ──────────────────────────────────────────────────
+async function runHealthAdvice() {
+  const conditions_raw = (document.getElementById('ha-conditions').value||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+  const valid_conditions = ['diabetes','hypertension','heart_disease','celiac','kidney_disease','obesity','none'];
+  const profile = {
+    user_id: document.getElementById('ha-uid').value || 'user_demo',
+    name: '', age: parseInt(document.getElementById('ha-age').value||'40'),
+    gender: document.getElementById('ha-gender').value,
+    weight_kg: parseFloat(document.getElementById('ha-weight').value||'70'),
+    height_cm: 170, activity_level: 'moderately_active', fitness_goal: 'maintain_weight',
+    health_conditions: conditions_raw.filter(c => valid_conditions.includes(c)),
+    allergies: [], dietary_preferences: [], cultural_background: '',
+  };
+  showLoader('ha-loader'); clearResult('ha-result');
+  try {
+    const res = await fetch(`${API}/api/health/advice`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ profile, specific_concern: document.getElementById('ha-concern').value })
+    });
+    const data = await res.json();
+    let text = data.result?.advice || '';
+    if (data.result?.risk_flags?.length) text = data.result.risk_flags.join('\n') + '\n\n' + text;
+    showResult('ha-result', text || JSON.stringify(data.result, null, 2));
+  } catch(e) {
+    showResult('ha-result', '⚠️ API Error: ' + e.message);
+  }
+  hideLoader('ha-loader');
+}
+
+// ── Meal Log ───────────────────────────────────────────────────────
+async function logMeal() {
+  const uid = document.getElementById('ml-uid').value || 'user_001';
+  const date_str = document.getElementById('ml-date').value || new Date().toISOString().split('T')[0];
+  const meal_type = document.getElementById('ml-type').value;
+  const description = document.getElementById('ml-desc').value.trim();
+  if (!description) return alert('Please describe your meal.');
+  showLoader('ml-loader'); clearResult('ml-result');
+  try {
+    const res = await fetch(`${API}/api/meals/log`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ user_id: uid, date: date_str, meal_type, description, input_mode: 'text' })
+    });
+    const data = await res.json();
+    const result = data.result;
+    const n = result?.meal_logged?.total_nutrients || {};
+
+    // Update meal chart
+    document.getElementById('ml-nutrients').style.display = 'block';
+    if (!mealChart) {
+      mealChart = new Chart(document.getElementById('chart-meal'), {
+        type: 'bar',
+        data: { labels: ['Calories (kcal)','Protein (g)','Carbs (g)','Fat (g)','Fiber (g)'],
+          datasets: [{ data: [0,0,0,0,0], backgroundColor: ['#0f62fe','#38a169','#d69e2e','#e53e3e','#805ad5'] }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    }
+    mealChart.data.datasets[0].data = [n.calories||0, n.protein_g||0, n.carbs_g||0, n.fat_g||0, n.fiber_g||0];
+    mealChart.update();
+
+    const feedback = result?.feedback || 'No feedback generated.';
+    const remaining = result?.remaining_calories;
+    let summary = `✅ Meal logged successfully!\n\n${feedback}`;
+    if (remaining !== undefined) summary += `\n\n📊 Remaining calories today: ${remaining} kcal`;
+    showResult('ml-result', summary);
+    refreshDashboard();
+  } catch(e) {
+    showResult('ml-result', '⚠️ API Error: ' + e.message);
+  }
+  hideLoader('ml-loader');
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+function showLoader(id) { document.getElementById(id).classList.add('show'); }
+function hideLoader(id) { document.getElementById(id).classList.remove('show'); }
+function clearResult(id) { const el = document.getElementById(id); el.textContent = ''; el.classList.add('empty'); }
+function showResult(id, text) { const el = document.getElementById(id); el.textContent = text; el.classList.remove('empty'); }
+
+// ── Init ───────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('ml-date').value = new Date().toISOString().split('T')[0];
+  initCharts();
+  setTimeout(() => refreshDashboard(), 300);
+});
+</script>
+</body>
+</html>
